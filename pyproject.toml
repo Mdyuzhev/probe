@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "probe"
+version = "0.1.0"
+description = "Product Reverse Observation by Bot Ensemble — рой атомарных зондов для картографии продуктов"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0",
+    "click>=8.0",
+    "javalang>=0.13",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-cov"]
+
+[project.scripts]
+probe = "probe.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["probe*", "probes*"]
