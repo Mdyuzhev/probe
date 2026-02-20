@@ -1,4 +1,4 @@
-"""CLI точка входа PROBE: команда `probe scan`."""
+"""CLI точка входа PROBE: команды `probe scan`, `probe map`, `probe analyze`."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from pathlib import Path
 
 import click
 
+from probe.analyzers.base import BaseAnalyzer
+from probe.analyzers.base import load_findings as load_findings_flat
 from probe.correlator import correlate, load_findings
 from probe.runner import run_probes
 from probes.base import BaseProbe
@@ -86,7 +88,7 @@ def scan(target: str, env: str, out: str, workers: int) -> None:
         encoding="utf-8",
     )
 
-    click.echo(f"Findings: {len(dossier.findings)} → {out_file}")
+    click.echo(f"Findings: {len(dossier.findings)} -> {out_file}")
 
 
 @cli.command(name="map")
@@ -101,4 +103,68 @@ def map_cmd(findings: str, out: str) -> None:
 
     result = correlate(dossier, out_path=out)
     lines = result.count("\n") + 1
-    click.echo(f"Product Map сохранён: {out}  ({lines} строк)")
+    click.echo(f"Product Map: {out}  ({lines} строк)")
+
+
+def _discover_analyzers() -> list[BaseAnalyzer]:
+    """Автообнаружение всех аналитиков из пакета probe.analyzers."""
+    analyzer_instances: list[BaseAnalyzer] = []
+
+    pkg_name = "probe.analyzers"
+    try:
+        pkg = importlib.import_module(pkg_name)
+    except ModuleNotFoundError:
+        return analyzer_instances
+
+    for module_info in pkgutil.iter_modules(pkg.__path__):
+        if module_info.name == "base":
+            continue
+        module = importlib.import_module(f"{pkg_name}.{module_info.name}")
+        for attr_name in dir(module):
+            attr = getattr(module, attr_name)
+            if (
+                isinstance(attr, type)
+                and issubclass(attr, BaseAnalyzer)
+                and attr is not BaseAnalyzer
+                and attr.name
+            ):
+                analyzer_instances.append(attr())
+
+    return analyzer_instances
+
+
+@cli.command(name="analyze")
+@click.option("--findings", "-f", required=True,
+              help="Директория с findings (JSON-файлы)")
+@click.option("--out", "-o", default="analysis",
+              help="Директория для сохранения результатов анализа")
+def analyze_cmd(findings: str, out: str) -> None:
+    """Запустить аналитики на findings и сохранить результаты."""
+    all_findings = load_findings_flat(findings)
+    if not all_findings:
+        click.echo(f"Findings не найдены в {findings}")
+        return
+
+    click.echo(f"Загружено findings: {len(all_findings)}")
+
+    analyzers = _discover_analyzers()
+    if not analyzers:
+        click.echo("Аналитики не найдены в probe/analyzers/")
+        return
+
+    click.echo(f"Найдено аналитиков: {len(analyzers)}")
+
+    out_dir = Path(out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    for analyzer in analyzers:
+        try:
+            result = analyzer.analyze(all_findings)
+            out_file = out_dir / f"{analyzer.name}.json"
+            out_file.write_text(
+                json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            click.echo(f"[{analyzer.name}] -> {out_file}")
+        except Exception as exc:
+            logging.error("[%s] ошибка: %s", analyzer.name, exc)

@@ -1,4 +1,4 @@
-"""Модели данных PROBE: Finding, Dossier, Diff."""
+"""Модели данных PROBE: Finding, Dossier, Diff, AnalysisResult."""
 
 from __future__ import annotations
 
@@ -56,3 +56,18 @@ class Diff(BaseModel):
     changed: list[tuple[Finding, Finding]] = Field(
         default_factory=list, description="Изменённые findings (было, стало)"
     )
+
+
+class AnalysisResult(BaseModel):
+    """Результат работы аналитика."""
+
+    analyzer: str = Field(..., description="Идентификатор аналитика")
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Временная метка анализа",
+    )
+    data: dict[str, Any] = Field(..., description="Данные, специфичные для аналитика")
+    summary: str = Field(..., description="Человекочитаемый вывод")
+    confidence: float = Field(1.0, ge=0.0, le=1.0, description="Уверенность [0..1]")
+
+    model_config = {"json_encoders": {datetime: lambda v: v.isoformat()}}
