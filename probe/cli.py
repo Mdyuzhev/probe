@@ -10,6 +10,7 @@ from pathlib import Path
 
 import click
 
+from probe.correlator import correlate, load_findings
 from probe.runner import run_probes
 from probes.base import BaseProbe
 
@@ -86,3 +87,18 @@ def scan(target: str, env: str, out: str, workers: int) -> None:
     )
 
     click.echo(f"Findings: {len(dossier.findings)} → {out_file}")
+
+
+@cli.command(name="map")
+@click.option("--findings", "-f", required=True,
+              help="JSON-файл или директория с findings")
+@click.option("--out", "-o", default="product-map.md",
+              help="Выходной файл Product Map")
+def map_cmd(findings: str, out: str) -> None:
+    """Синтезировать findings в карту продукта (Product Map)."""
+    dossier = load_findings(findings)
+    click.echo(f"Загружено findings: {len(dossier.findings)}")
+
+    result = correlate(dossier, out_path=out)
+    lines = result.count("\n") + 1
+    click.echo(f"Product Map сохранён: {out}  ({lines} строк)")
